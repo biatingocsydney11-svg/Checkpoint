@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Checkpoint Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: linear-gradient(to bottom, #0077ff, #001f4d);
+      display: flex;
+      flex-direction: column;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+    
+    #notifBar {
+      background: rgba(255,255,255,0.95);
+      padding: 12px;
+      text-align: center;
+      font-weight: bold;
+      color: #001f4d;
+      border-bottom: 2px solid #0077ff;
+      font-size: 14px;
+      min-height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    #map {
+      flex: 1;
+      position: relative;
+    }
+
+    /* Deep Ocean Sidebar Theme */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      right: -350px;
+      width: 350px;
+      height: 100vh;
+      background: linear-gradient(135deg, #001f4d 0%, #003366 60%, #005580 100%);
+      border-left: 3px solid #00bfff;
+      transition: right 0.3s ease-in-out;
+      padding: 24px 18px 18px 18px;
+      overflow-y: auto;
+      box-shadow: -4px 0 24px rgba(0,32,64,0.25);
+      z-index: 1001;
+      color: #e0f7fa;
+    }
+
+    #sidebar.open {
+      right: 0;
+    }
+
+    #sidebar h3, #sidebar h4 {
+      color: #00bfff;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+
+    #sidebar .account-info {
+      background: rgba(0,32,64,0.7);
+      border-radius: 10px;
+      padding: 14px 12px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 8px rgba(0,32,64,0.12);
+      color: #e0f7fa;
+      font-size: 15px;
+    }
+
+    #sidebar .notif-bar {
+      background: linear-gradient(90deg, #003366 60%, #005580 100%);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 18px;
+      color: #e0f7fa;
+      font-weight: bold;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,32,64,0.10);
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    #toggleSidebar {
+      position: absolute;
+      top: 20px;
+      left: -55px;
+      background: #0077ff;
+      color: white;
+      border: none;
+      border-radius: 15px 0 0 15px;
+      padding: 10px 18px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+      z-index: 1002;
+    }
+
+    #toggleSidebar:hover {
+      background: #0056cc;
+    }
+
+    .device-item {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 8px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .device-info {
+      flex: 1;
+    }
+    
+    .device-id {
+      font-weight: bold;
+      color: #0077ff;
+      font-size: 16px;
+    }
+    
+    .device-coords {
+      color: #666;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    
+    .device-time {
+      color: #999;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    
+    .current-device {
+      background: #e3f2fd;
+      border-color: #0077ff;
+    }
+
+    /* Login */
+    #loginBox {
+      position: absolute;
+      top: 50%; 
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0px 8px 25px rgba(0,0,0,0.3);
+      width: 90%;
+      max-width: 350px;
+    }
+    
+    #loginBox h3 {
+      text-align: center;
+      color: #001f4d;
+      margin-bottom: 25px;
+      font-size: 24px;
+    }
+    
+    #loginBox input {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: 2px solid #e1e1e1;
+      border-radius: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    
+    #loginBox input:focus {
+      border-color: #0077ff;
+      outline: none;
+    }
+    
+    #loginBtn {
+      width: 100%;
+      padding: 12px;
+      background: #0077ff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    
+    #loginBtn:hover {
+      background: #0056cc;
+    }
+    
+    .auth-switch {
+      text-align: center;
+      margin-top: 15px;
+      color: #666;
+    }
+    
+    #switchModeBtn {
+      background: none;
+      border: none;
+      color: #0077ff;
+      cursor: pointer;
+      text-decoration: underline;
+      font-size: 14px;
+      margin-left: 5px;
+    }
+    
+    #switchModeBtn:hover {
+      color: #0056cc;
+    }
+    
+    #logoutBtn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 15px;
+    }
+    
+    #logoutBtn:hover {
+      background: #c82333;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #28a745;
+      display: inline-block;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    
+    .error-message {
+      color: #dc3545;
+      text-align: center;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    
+    .loading {
+      text-align: center;
+      color: #666;
+      padding: 20px;
+    }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+</head>
+<body>
+  <div id="notifBar">
+    <span class="status-indicator"></span>
+    Welcome to Checkpoint Tracker - Connecting...
+  </div>
+  <div id="map"></div>
+
+  <!-- Deep Ocean Sidebar Dashboard -->
+  <div id="sidebar">
+    <button id="toggleSidebar">◀ Dashboard</button>
+    <div class="account-info" id="accountInfo">
+      <div><b>User:</b> <span id="accountName">-</span></div>
+      <div><b>Email:</b> <span id="accountEmail">-</span></div>
+    </div>
+    <div class="notif-bar" id="sidebarNotifBar">
+      <span class="status-indicator"></span>Welcome to Checkpoint Tracker
+    </div>
+    <h3>Tracked Devices</h3>
+    <div id="linkChildBox" style="margin-bottom:18px;">
+      <input type="email" id="linkChildEmail" placeholder="Child's email" style="width:70%;padding:8px;border-radius:6px;border:1px solid #00bfff;background:#002b4d;color:#e0f7fa;">
+      <button id="linkChildBtn" style="background:#00bfff;color:white;border:none;border-radius:6px;padding:8px 12px;font-weight:bold;cursor:pointer;">Link Child</button>
+      <div id="linkChildMsg" style="color:#00bfff;font-size:13px;margin-top:6px;"></div>
+    </div>
+    <div id="deviceList">
+      <div class="loading">Loading devices...</div>
+    </div>
+    <button id="logoutBtn" style="background:#003366;">Logout</button>
+    <div id="deviceDetails" class="hidden"></div>
+  </div>
+
+  <!-- Login/Register -->
+  <div id="loginBox">
+    <h3 id="authTitle">🔐 Login</h3>
+    <input type="text" id="displayName" placeholder="Enter your name" style="display: none;">
+    <input type="email" id="email" placeholder="Enter your email">
+    <input type="password" id="password" placeholder="Enter your password">
+    <input type="password" id="confirmPassword" placeholder="Confirm your password" style="display: none;">
+    <button id="loginBtn">Login</button>
+    <div class="auth-switch">
+      <span id="switchText">Don't have an account?</span>
+      <button id="switchModeBtn" type="button">Register</button>
+    </div>
+    <div id="errorMessage" class="error-message"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK020UjQmGU1FJVsH7ecmnPy9sNTUn0Qo",
+      authDomain: "checkpoint-d7a4c.firebaseapp.com",
+      databaseURL: "https://checkpoint-d7a4c-default-rtdb.firebaseio.com",
+      projectId: "checkpoint-d7a4c",
+      storageBucket: "checkpoint-d7a4c.appspot.com",
+      messagingSenderId: "187939004352",
+      appId: "1:187939004352:web:82baf19ca3cf6b3ddd7225",
+      measurementId: "G-F9FPNJ44H8"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    // DOM elements
+    const loginBox = document.getElementById("loginBox");
+    const mapDiv = document.getElementById("map");
+    const notifBar = document.getElementById("notifBar");
+  const errorMessage = document.getElementById("errorMessage");
+  const sidebarNotifBar = document.getElementById("sidebarNotifBar");
+  const accountName = document.getElementById("accountName");
+  const accountEmail = document.getElementById("accountEmail");
+    
+    let map, deviceId, userEmail, displayName;
+    const markers = {};
+    let watchId;
+    let isRegisterMode = false;
+
+
+    // Sidebar toggle
+    const sidebar = document.getElementById("sidebar");
+    document.getElementById("toggleSidebar").addEventListener("click", () => {
+      sidebar.classList.toggle("open");
+      const button = document.getElementById("toggleSidebar");
+      button.innerHTML = sidebar.classList.contains("open") ? "▶ Close" : "◀ Dashboard";
+    });
+
+    // Link Child button handler
+    const linkChildBtn = document.getElementById("linkChildBtn");
+    const linkChildEmailInput = document.getElementById("linkChildEmail");
+    const linkChildMsg = document.getElementById("linkChildMsg");
+    linkChildBtn.addEventListener("click", async () => {
+      const childEmail = linkChildEmailInput.value.trim().toLowerCase();
+      if (!childEmail) {
+        linkChildMsg.textContent = "Please enter a child's email.";
+        return;
+      }
+      linkChildBtn.textContent = "Linking...";
+      linkChildBtn.disabled = true;
+      linkChildMsg.textContent = "";
+      // Find child UID by email
+      try {
+        // Get all devices from Firebase
+        const devicesRef = ref(db, "devices");
+        onValue(devicesRef, (snapshot) => {
+          const devices = snapshot.val();
+          let foundChildId = null;
+          for (const uid in devices) {
+            if (devices[uid].email && devices[uid].email.toLowerCase() === childEmail) {
+              foundChildId = uid;
+              break;
+            }
+          }
+          if (foundChildId) {
+            // Save link in /links/{parentId}/{childId}: true
+            set(ref(db, `links/${deviceId}/${foundChildId}`), true)
+              .then(() => {
+                linkChildMsg.textContent = "Child linked successfully!";
+                linkChildBtn.textContent = "Link Child";
+                linkChildBtn.disabled = false;
+                linkChildEmailInput.value = "";
+              })
+              .catch((err) => {
+                linkChildMsg.textContent = "Error linking child: " + err.message;
+                linkChildBtn.textContent = "Link Child";
+                linkChildBtn.disabled = false;
+              });
+          } else {
+            linkChildMsg.textContent = "No child found with that email.";
+            linkChildBtn.textContent = "Link Child";
+            linkChildBtn.disabled = false;
+          }
+        }, { onlyOnce: true });
+      } catch (err) {
+        linkChildMsg.textContent = "Error: " + err.message;
+        linkChildBtn.textContent = "Link Child";
+        linkChildBtn.disabled = false;
+      }
+    });
+
+    // Auth mode switching
+    document.getElementById("switchModeBtn").addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleAuthMode();
+    });
+
+    // Login/Register button functionality
+    document.getElementById("loginBtn").onclick = function(e) {
+      e.preventDefault();
+      if (isRegisterMode) {
+        handleRegister();
+      } else {
+        handleLogin();
+      }
+    };
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      const title = document.getElementById("authTitle");
+      const loginBtn = document.getElementById("loginBtn");
+      const switchText = document.getElementById("switchText");
+      const switchBtn = document.getElementById("switchModeBtn");
+      const displayNameField = document.getElementById("displayName");
+      const confirmPasswordField = document.getElementById("confirmPassword");
+
+      if (isRegisterMode) {
+        title.textContent = "📝 Register";
+        loginBtn.textContent = "Register";
+        switchText.textContent = "Already have an account?";
+        switchBtn.textContent = "Login";
+        displayNameField.style.display = "block";
+        confirmPasswordField.style.display = "block";
+      } else {
+        title.textContent = "🔐 Login";
+        loginBtn.textContent = "Login";
+        switchText.textContent = "Don't have an account?";
+        switchBtn.textContent = "Register";
+        displayNameField.style.display = "none";
+        confirmPasswordField.style.display = "none";
+      }
+
+      // Clear all input fields and error message when switching modes
+      document.getElementById("email").value = "";
+      document.getElementById("password").value = "";
+      document.getElementById("confirmPassword").value = "";
+      document.getElementById("displayName").value = "";
+      errorMessage.textContent = "";
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      
+      if (!email || !password) {
+        showError("Please enter both email and password");
+        return;
+      }
+      
+      try {
+        document.getElementById("loginBtn").textContent = "Logging in...";
+        await signInWithEmailAndPassword(auth, email, password);
+        errorMessage.textContent = "";
+      } catch (err) {
+        showError("Login failed: " + err.message);
+        document.getElementById("loginBtn").textContent = "Login";
+      }
+    }
+
+    async function handleRegister() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+      const name = document.getElementById("displayName").value.trim();
+      
+      if (!email || !password || !confirmPassword || !name) {
+        showError("Please fill in all fields");
+        return;
+      }
+      
+      if (password !== confirmPassword) {
+        showError("Passwords do not match");
+        return;
+      }
+      
+      if (password.length < 6) {
+        showError("Password must be at least 6 characters long");
+        return;
+      }
+      
+      try {
+        document.getElementById("loginBtn").textContent = "Creating account...";
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, {
+          displayName: name
+        });
+        errorMessage.textContent = "";
+      } catch (err) {
+        showError("Registration failed: " + err.message);
+        document.getElementById("loginBtn").textContent = "Register";
+      }
+    }
+
+    // Logout functionality
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try {
+        if (watchId) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+        await signOut(auth);
+      } catch (err) {
+        console.error("Logout error:", err);
+      }
+    });
+
+    // Enter key for login/register
+    document.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && loginBox.style.display !== "none") {
+        e.preventDefault();
+        document.getElementById("loginBtn").click();
+      }
+    });
+
+    // Authentication state observer
+    let locationUpdateInterval = null;
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loginBox.style.display = "none";
+        userEmail = user.email;
+        displayName = user.displayName || user.email.split('@')[0];
+        accountName.textContent = displayName;
+        accountEmail.textContent = userEmail;
+        initMap(user.uid);
+        sidebarNotifBar.innerHTML = `<span class="status-indicator"></span>Logged in as: ${displayName}`;
+
+        // Start periodic location notification updates
+        if (locationUpdateInterval) clearInterval(locationUpdateInterval);
+        locationUpdateInterval = setInterval(() => {
+          refreshLocationNotifications();
+        }, 300000); // 5 minutes
+        // Also run immediately on login
+        refreshLocationNotifications();
+      } else {
+        loginBox.style.display = "block";
+        accountName.textContent = "-";
+        accountEmail.textContent = "-";
+        sidebarNotifBar.innerHTML = `<span class="status-indicator"></span>Please log in to start tracking`;
+        if (map) {
+          map.remove();
+          map = null;
+        }
+        if (locationUpdateInterval) clearInterval(locationUpdateInterval);
+      }
+    });
+
+    // Initialize map and tracking
+    function initMap(uid) {
+      deviceId = uid;
+      // Create map centered on Cebu City
+      map = L.map("map").setView([10.3103, 123.9494], 13);
+      // Add tile layer
+      L.tileLayer('https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=ce143278d50e455596672566ef35fb5b', {
+        attribution: "© OpenStreetMap contributors © Geoapify",
+        maxZoom: 19
+      }).addTo(map);
+      // Start location tracking
+      startLocationTracking();
+      // Listen for all devices
+      onValue(ref(db, "devices"), updateDevicesList);
+    }
+
+    // Center map on selected device
+    window.centerMapDevice = function(id) {
+      if (markers[id]) {
+        map.setView(markers[id].getLatLng(), 16);
+        markers[id].openPopup();
+      }
+    };
+
+    // Track selected device (follow its location in real time)
+    let trackedDeviceId = null;
+    window.trackDevice = function(id) {
+      trackedDeviceId = id;
+      notifBar.innerHTML = `<span class="status-indicator"></span>Tracking ${id === deviceId ? 'yourself' : 'device'}...`;
+    };
+
+    // Update map view if tracking a device
+    function updateTrackedDeviceView(data) {
+      if (trackedDeviceId && data && data[trackedDeviceId] && markers[trackedDeviceId]) {
+        const { latitude, longitude } = data[trackedDeviceId];
+        map.setView([latitude, longitude], 16);
+        markers[trackedDeviceId].openPopup();
+      }
+    }
+
+    // Helper functions
+    function showError(message) {
+      errorMessage.textContent = message;
+      setTimeout(() => {
+        errorMessage.textContent = "";
+      }, 5000);
+    }
+
+    function getTimeDifference(timestamp) {
+      const now = new Date();
+      const then = new Date(timestamp);
+      const diffMs = now - then;
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+      return `${Math.floor(diffMins / 1440)}d ago`;
+    }
+
+    // Request location permissions on load
+    window.addEventListener('load', () => {
+      if (navigator.geolocation) {
+        navigator.permissions.query({name: 'geolocation'}).then((result) => {
+          console.log('Geolocation permission:', result.state);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
