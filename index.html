@@ -264,7 +264,8 @@
 <body>
   <div id="notifBar">
     <span class="status-indicator"></span>
-    Welcome to Checkpoint Tracker - Connecting...
+    <span id="notifText"></span>Welcome to Checkpoint Tracker - Connecting...</span>
+    <button id="enableNotifBtn" style="margin-left:12px;padding:6px 10px;border-radius:6px;background:#00bfff;color:white;border:none;cursor:pointer;font-weight:bold;">Enable notifications</button>
   </div>
   <div id="map"></div>
 
@@ -683,11 +684,8 @@
     // Initialize map and tracking
     function initMap(uid) {
       deviceId = uid;
-      
-      // Request notification permission
-      if ("Notification" in window) {
-        Notification.requestPermission();
-      }
+      // Do NOT auto-request notification permission here to avoid browser blocking.
+      // The user can explicitly enable notifications using the button in the top bar.
       
       // Create map centered on Cebu City
       map = L.map("map").setView([10.3103, 123.9494], 13);
@@ -1102,10 +1100,52 @@
           console.log('Geolocation permission:', result.state);
         });
       }
-      
-      // Also request notification permission
-      if ("Notification" in window) {
-        Notification.requestPermission();
+      // Do not call Notification.requestPermission() automatically here — modern browsers
+      // on insecure origins or without a user gesture will block the prompt. Provide an
+      // explicit button instead.
+      updateNotificationUI();
+    });
+
+    // Notification UI elements
+    const enableNotifBtn = document.getElementById('enableNotifBtn');
+    const notifText = document.getElementById('notifText');
+
+    function updateNotificationUI() {
+      if (!('Notification' in window)) {
+        enableNotifBtn.style.display = 'none';
+        notifText.textContent = 'Notifications not supported in this browser.';
+        return;
+      }
+
+      if (Notification.permission === 'granted') {
+        enableNotifBtn.style.display = 'none';
+        notifText.textContent = 'Notifications enabled.';
+      } else if (Notification.permission === 'denied') {
+        enableNotifBtn.style.display = 'inline-block';
+        notifText.textContent = 'Notifications are blocked. Check browser settings to allow.';
+      } else {
+        enableNotifBtn.style.display = 'inline-block';
+        notifText.textContent = 'Click to enable notifications for alerts.';
+      }
+    }
+
+    enableNotifBtn.addEventListener('click', async () => {
+      if (!('Notification' in window)) return;
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          notifText.textContent = 'Notifications enabled.';
+          enableNotifBtn.style.display = 'none';
+          // Optionally show a test notification
+          new Notification('Checkpoint Tracker', { body: 'Notifications enabled.' });
+        } else if (permission === 'denied') {
+          notifText.textContent = 'Notifications blocked. Open browser settings to allow.';
+        } else {
+          notifText.textContent = 'Notification permission dismissed.';
+        }
+      } catch (err) {
+        console.error('Notification request failed:', err);
+        notifText.textContent = 'Unable to request notification permission.';
       }
     });
   </script>
