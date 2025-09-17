@@ -666,6 +666,7 @@
         }, 300000); // 5 minutes
         // Also run immediately on login
         refreshLocationNotifications();
+        updateLinkedDevicesNotifBar();
       } else {
         loginBox.style.display = "block";
         accountName.textContent = "-";
@@ -1055,7 +1056,43 @@
             }
           });
         });
+        // After checking individual child locations, update the visible notification bar summary
+        updateLinkedDevicesNotifBar();
       });
+    }
+
+    // Update the top notification bar with a compact summary of linked devices (runs every 5 minutes via existing scheduler)
+    async function updateLinkedDevicesNotifBar() {
+      if (!deviceId) return;
+      try {
+        const linksSnap = await get(ref(db, `links/${deviceId}`));
+        const links = linksSnap.val() || {};
+        const childIds = Object.keys(links);
+        if (childIds.length === 0) {
+          notifBar.innerHTML = `<span class="status-indicator"></span>No linked devices`; 
+          return;
+        }
+
+        // Fetch each child's latest info in parallel
+        const promises = childIds.map(id => get(ref(db, `devices/${id}`)).then(s => ({ id, data: s.val() })));
+        const results = await Promise.all(promises);
+
+        // Build a compact summary: Name (coords) · lastSeen
+        const parts = results.map(r => {
+          const d = r.data || {};
+          const name = d.displayName || d.email || `Device ${r.id.substring(0,8)}`;
+          if (d.latitude && d.longitude) {
+            const coords = `${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}`;
+            const last = d.lastSeen ? getTimeDifference(d.lastSeen) : 'Unknown';
+            return `${name}: ${coords} · ${last}`;
+          }
+          return `${name}: No location`; 
+        }).slice(0,4); // show up to 4 devices
+
+        notifBar.innerHTML = `<span class="status-indicator"></span>` + parts.join(' | ');
+      } catch (err) {
+        console.error('Error updating linked devices notif bar:', err);
+      }
     }
 
     // Request permissions on load
