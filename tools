@@ -1,0 +1,78 @@
+// ...existing code...
+const admin = require('firebase-admin');
+const fetch = (...args) => import('node-fetch').then(m=>m.default(...args));
+
+if (!process.env.FIREBASE_SERVICE_ACCOUNT || !process.env.FIREBASE_DB_URL || !process.env.OPENAI_KEY) {
+  console.error('Set FIREBASE_SERVICE_ACCOUNT, FIREBASE_DB_URL and OPENAI_KEY as secrets');
+  process.exit(1);
+}
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: process.env.FIREBASE_DB_URL
+});
+
+const db = admin.database();
+const OPENAI_KEY = process.env.OPENAI_KEY;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+async function summarizeTrace(events) {
+  const trace = events.map(e => `${new Date(e.timestamp).toLocaleString()}: ${e.latitude.toFixed(5)},${e.longitude.toFixed(5)}`).join('\n');
+  const prompt = [
+    { role: "system", content: "You are a helpful assistant that summarizes short GPS traces for parents." },
+    { role: "user", content: `Summarize the following GPS trace concisely (2-3 sentences):\n\n${trace}` }
+  ];
+  const resp = await fetch(OPENAI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+    body: JSON.stringify({ model: MODEL, messages: prompt, max_tokens: 250 })
+  });
+  const j = await resp.json();
+  return j?.choices?.[0]?.message?.content?.trim() || 'Summary unavailable.';
+}
+
+(async () => {
+  try {
+    const linksSnap = await db.ref('links').once('value');
+    const links = linksSnap.val() || {};
+    for (const parentId of Object.keys(links)) {
+      const childIds = Object.keys(links[parentId] || {});
+      for (const childId of childIds) {
+        try {
+          const cutoff = Date.now() - 1000 * 60 * 60 * 6; // last 6h
+          const histSnap = await db.ref(`locationHistory/${childId}`)
+                                 .orderByChild('timestamp')
+                                 .startAt(cutoff)
+                                 .limitToLast(300)
+                                 .once('value');
+          const history = histSnap.val() || {};
+          const events = Object.values(history);
+          if (events.length === 0) {
+            await db.ref(`summaries/${parentId}/${childId}`).push({
+              summary: 'No recent location data.',
+              generatedAt: admin.database.ServerValue.TIMESTAMP
+            });
+            continue;
+          }
+          const summary = await summarizeTrace(events);
+          await db.ref(`summaries/${parentId}/${childId}`).push({
+            summary,
+            generatedAt: admin.database.ServerValue.TIMESTAMP,
+            sampleCount: events.length
+          });
+          console.log(`Saved summary for parent=${parentId} child=${childId}`);
+        } catch (err) {
+          console.error('child summarize error', err);
+        }
+      }
+    }
+    process.exit(0);
+  } catch (err) {
+    console.error('Fatal summarizer error', err);
+    process.exit(2);
+  }
+})();
+// ...existing code...
