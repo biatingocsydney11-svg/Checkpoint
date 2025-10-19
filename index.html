@@ -269,4 +269,1187 @@
     <button id="enableNotifBtn" style="margin-left:12px;padding:6px 10px;border-radius:6px;background:#00bfff;color:white;border:none;cursor:pointer;font-weight:bold;">Enable notifications</button>
   </div>
   <!-- Reminder HUD -->
-  <div id="reminderHUD" style="position:fixed;left:50%;top:18%;transform:translateX(-50%);background:linear-gradient(90deg,#ffffff,#e6f7ff);color:#001f4d;padding:18px;border-radius:10px;box-shado[...]
+  <div id="reminderHUD" style="position:fixed;left:50%;top:18%;transform:translateX(-50%);background:linear-gradient(90deg,#ffffff,#e6f7ff);color:#001f4d;padding:18px;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.25);z-index:2000;display:none;min-width:300px;max-width:90%;">
+    <div id="reminderHUDText" style="font-weight:bold;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="snoozeBtn" style="background:#ffc107;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-weight:bold;">Snooze 5m</button>
+      <button id="dismissBtn" style="background:#28a745;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;color:white;font-weight:bold;">Dismiss</button>
+    </div>
+  </div>
+  <div id="map"></div>
+
+  <!-- Deep Ocean Sidebar Dashboard -->
+  <div id="sidebar">
+    <button id="toggleSidebar">◀ Dashboard</button>
+    <div class="account-info" id="accountInfo">
+      <div><b>User:</b> <span id="accountName">-</span></div>
+      <div><b>Email:</b> <span id="accountEmail">-</span></div>
+    </div>
+    <div class="notif-bar" id="sidebarNotifBar">
+      <span class="status-indicator"></span>Welcome to Checkpoint Tracker
+    </div>
+    <h3>Tracked Devices</h3>
+    <div id="linkChildBox" style="margin-bottom:18px;">
+      <input type="email" id="linkChildEmail" placeholder="Child's email" style="width:70%;padding:8px;border-radius:6px;border:1px solid #00bfff;background:#002b4d;color:#e0f7fa;">
+      <button id="linkChildBtn" style="background:#00bfff;color:white;border:none;border-radius:6px;padding:8px 12px;font-weight:bold;cursor:pointer;">Link Child</button>
+      <div id="linkChildMsg" style="color:#00bfff;font-size:13px;margin-top:6px;"></div>
+    </div>
+    <h4 style="margin-top:12px;color:#00bfff;">Reminders</h4>
+    <div id="reminderBox" style="background: rgba(0,32,64,0.4); padding:10px; border-radius:8px; margin-bottom:12px;">
+      <input type="text" id="reminderNote" placeholder="Reminder note" style="width:100%;padding:8px;border-radius:6px;border:1px solid #00bfff;background:#002b4d;color:#e0f7fa;margin-bottom:8px;">
+      <input type="datetime-local" id="reminderTime" style="width:100%;padding:8px;border-radius:6px;border:1px solid #00bfff;background:#002b4d;color:#e0f7fa;margin-bottom:8px;">
+      <button id="addReminderBtn" style="width:100%;background:#00bfff;color:white;border:none;border-radius:6px;padding:8px 12px;font-weight:bold;cursor:pointer;">Add Reminder</button>
+      <div id="reminderMsg" style="color:#e0f7fa;margin-top:6px;font-size:13px;"></div>
+    </div>
+    <div id="reminderList" style="margin-bottom:12px;color:#e0f7fa;"></div>
+    <div id="deviceList">
+      <div class="loading">Loading devices...</div>
+    </div>
+    <button id="logoutBtn" style="background:#003366;">Logout</button>
+    <div id="deviceDetails" class="hidden"></div>
+  </div>
+
+  <!-- Login/Register -->
+  <div id="loginBox">
+    <h3 id="authTitle">🔐 Login</h3>
+    <input type="text" id="displayName" placeholder="Enter your name" style="display: none;">
+    <input type="email" id="email" placeholder="Enter your email">
+    <input type="password" id="password" placeholder="Enter your password">
+    <input type="password" id="confirmPassword" placeholder="Confirm your password" style="display: none;">
+    <button id="loginBtn">Login</button>
+    <div class="auth-switch">
+      <span id="switchText">Don't have an account?</span>
+      <button id="switchModeBtn" type="button">Register</button>
+    </div>
+    <div id="errorMessage" class="error-message"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getDatabase, ref, set, get, update, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK020UjQmGU1FJVsH7ecmnPy9sNTUn0Qo",
+      authDomain: "checkpoint-d7a4c.firebaseapp.com",
+      databaseURL: "https://checkpoint-d7a4c-default-rtdb.firebaseio.com",
+      projectId: "checkpoint-d7a4c",
+      storageBucket: "checkpoint-d7a4c.appspot.com",
+      messagingSenderId: "187939004352",
+      appId: "1:187939004352:web:82baf19ca3cf6b3ddd7225",
+      measurementId: "G-F9FPNJ44H8"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    // DOM elements
+    const loginBox = document.getElementById("loginBox");
+    const mapDiv = document.getElementById("map");
+    const notifBar = document.getElementById("notifBar");
+  const errorMessage = document.getElementById("errorMessage");
+  const sidebarNotifBar = document.getElementById("sidebarNotifBar");
+  const accountName = document.getElementById("accountName");
+  const accountEmail = document.getElementById("accountEmail");
+    
+    let map, deviceId, userEmail, userName;
+    const markers = {};
+    let watchId;
+    let isRegisterMode = false;
+
+
+    // Sidebar toggle
+    const sidebar = document.getElementById("sidebar");
+    document.getElementById("toggleSidebar").addEventListener("click", () => {
+      sidebar.classList.toggle("open");
+      const button = document.getElementById("toggleSidebar");
+      button.innerHTML = sidebar.classList.contains("open") ? "▶ Close" : "◀ Dashboard";
+    });
+
+    // Link Child button handler
+    const linkChildBtn = document.getElementById("linkChildBtn");
+    const linkChildEmailInput = document.getElementById("linkChildEmail");
+    const linkChildMsg = document.getElementById("linkChildMsg");
+
+    // Create linked devices list container
+    const linkedDevicesContainer = document.createElement("div");
+    linkedDevicesContainer.id = "linkedDevicesContainer";
+    linkedDevicesContainer.style.marginTop = "10px";
+    document.getElementById("linkChildBox").appendChild(linkedDevicesContainer);
+
+    // Function to refresh linked devices list
+    // Track attached child listeners to avoid duplicates
+    const watchedChildren = new Set();
+    async function refreshLinkedDevices() {
+      if (!deviceId) return;
+      const linksRef = ref(db, `links/${deviceId}`);
+      onValue(linksRef, async (snapshot) => {
+        const links = snapshot.val() || {};
+        linkedDevicesContainer.innerHTML = "";
+        
+        // Remove listeners for children that are no longer linked
+        Array.from(watchedChildren).forEach(ch => {
+          if (!links[ch]) {
+            watchedChildren.delete(ch);
+          }
+        });
+
+        for (const childId in links) {
+          const deviceRef = ref(db, `devices/${childId}`);
+          const deviceSnapshot = await get(deviceRef);
+          const childDevice = deviceSnapshot.val();
+
+          if (childDevice) {
+            const deviceDiv = document.createElement("div");
+            deviceDiv.style.background = "rgba(0,115,255,0.1)";
+            deviceDiv.style.padding = "8px";
+            deviceDiv.style.borderRadius = "6px";
+            deviceDiv.style.marginBottom = "8px";
+            deviceDiv.style.display = "flex";
+            deviceDiv.style.justifyContent = "space-between";
+            deviceDiv.style.alignItems = "center";
+            
+            const info = document.createElement("div");
+            info.innerHTML = `
+              <div style="color: #e0f7fa; font-weight: bold;">${childDevice.displayName || childDevice.email}</div>
+              <div style="color: #00bfff; font-size: 12px;">${childDevice.email}</div>
+            `;
+            
+            const unlinkBtn = document.createElement("button");
+            unlinkBtn.textContent = "Unlink";
+            unlinkBtn.style.background = "#dc3545";
+            unlinkBtn.style.color = "white";
+            unlinkBtn.style.border = "none";
+            unlinkBtn.style.borderRadius = "4px";
+            unlinkBtn.style.padding = "4px 8px";
+            unlinkBtn.style.cursor = "pointer";
+            
+            unlinkBtn.onclick = () => unlinkChild(childId);
+            
+            deviceDiv.appendChild(info);
+            deviceDiv.appendChild(unlinkBtn);
+            linkedDevicesContainer.appendChild(deviceDiv);
+
+            // Attach per-child device listener only once
+            if (!watchedChildren.has(childId)) {
+              watchedChildren.add(childId);
+              onValue(deviceRef, (deviceSnapshot) => {
+                const device = deviceSnapshot.val();
+                if (device && device.lastSeen) {
+                  checkDeviceLocation(childId, device);
+                }
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // Function to unlink a child device
+    async function unlinkChild(childId) {
+      try {
+        await set(ref(db, `links/${deviceId}/${childId}`), null);
+        await set(ref(db, `devices/${childId}/linkedTo`), null);
+        refreshLinkedDevices();
+      } catch (err) {
+        linkChildMsg.textContent = "Error unlinking device: " + err.message;
+      }
+    }
+
+    linkChildBtn.addEventListener("click", async () => {
+      const childEmail = linkChildEmailInput.value.trim().toLowerCase();
+      if (!childEmail) {
+        linkChildMsg.textContent = "Please enter a child's email.";
+        return;
+      }
+      linkChildBtn.textContent = "Linking...";
+      linkChildBtn.disabled = true;
+      linkChildMsg.textContent = "";
+      
+      try {
+        // Get all devices from Firebase
+        const devicesRef = ref(db, "devices");
+        const snapshot = await get(devicesRef);
+        const devices = snapshot.val();
+        let foundChildId = null;
+
+        for (const uid in devices) {
+          if (devices[uid].email && devices[uid].email.toLowerCase() === childEmail) {
+            foundChildId = uid;
+            break;
+          }
+        }
+
+        if (foundChildId) {
+          // Check if device is already linked
+          const existingLinkRef = ref(db, `devices/${foundChildId}/linkedTo`);
+          const existingLinkSnapshot = await get(existingLinkRef);
+          
+          if (existingLinkSnapshot.val()) {
+            linkChildMsg.textContent = "This device is already linked to another parent.";
+          } else {
+            // Save bidirectional link
+            const updates = {
+              [`links/${deviceId}/${foundChildId}`]: true,
+              [`devices/${foundChildId}/linkedTo`]: deviceId
+            };
+            
+            await update(ref(db), updates);
+            linkChildMsg.textContent = "Child linked successfully!";
+            linkChildEmailInput.value = "";
+            refreshLinkedDevices();
+          }
+        } else {
+          linkChildMsg.textContent = "No device found with that email.";
+        }
+      } catch (err) {
+        linkChildMsg.textContent = "Error: " + err.message;
+      }
+      
+      linkChildBtn.textContent = "Link Child";
+      linkChildBtn.disabled = false;
+    });
+
+  // Note: linked devices are loaded after login in initMap to avoid registering listeners before deviceId is set
+
+    // Auth mode switching
+    document.getElementById("switchModeBtn").addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleAuthMode();
+    });
+
+    // Login/Register button functionality
+    document.getElementById("loginBtn").onclick = function(e) {
+      e.preventDefault();
+      if (isRegisterMode) {
+        handleRegister();
+      } else {
+        handleLogin();
+      }
+    };
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      const title = document.getElementById("authTitle");
+      const loginBtn = document.getElementById("loginBtn");
+      const switchText = document.getElementById("switchText");
+      const switchBtn = document.getElementById("switchModeBtn");
+      const displayNameField = document.getElementById("displayName");
+      const confirmPasswordField = document.getElementById("confirmPassword");
+
+      if (isRegisterMode) {
+        title.textContent = "📝 Register";
+        loginBtn.textContent = "Register";
+        switchText.textContent = "Already have an account?";
+        switchBtn.textContent = "Login";
+        displayNameField.style.display = "block";
+        confirmPasswordField.style.display = "block";
+      } else {
+        title.textContent = "🔐 Login";
+        loginBtn.textContent = "Login";
+        switchText.textContent = "Don't have an account?";
+        switchBtn.textContent = "Register";
+        displayNameField.style.display = "none";
+        confirmPasswordField.style.display = "none";
+      }
+
+      // Clear all input fields and error message when switching modes
+      document.getElementById("email").value = "";
+      document.getElementById("password").value = "";
+      document.getElementById("confirmPassword").value = "";
+      document.getElementById("displayName").value = "";
+      errorMessage.textContent = "";
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const loginBtn = document.getElementById("loginBtn");
+      
+      if (!email || !password) {
+        showError("Please enter both email and password");
+        return;
+      }
+      
+      try {
+        loginBtn.textContent = "Logging in...";
+        loginBtn.disabled = true;
+        
+        // Attempt to sign in
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Clear any error messages
+        errorMessage.textContent = "";
+        
+        // Update UI immediately
+        loginBox.style.display = "none";
+        userEmail = user.email;
+        userName = user.displayName || user.email.split('@')[0];
+        accountName.textContent = userName;
+        accountEmail.textContent = userEmail;
+        
+  // initMap will be called via onAuthStateChanged; no need to call it here
+        
+        // Update sidebar notification
+        sidebarNotifBar.innerHTML = `<span class="status-indicator"></span>Logged in as: ${userName}`;
+        
+      } catch (err) {
+        showError("Login failed: " + err.message);
+        loginBtn.textContent = "Login";
+        loginBtn.disabled = false;
+      }
+    }
+
+    async function handleRegister() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+      const name = document.getElementById("displayName").value.trim();
+      const loginBtn = document.getElementById("loginBtn");
+      
+      if (!email || !password || !confirmPassword || !name) {
+        showError("Please fill in all fields");
+        return;
+      }
+      
+      if (password !== confirmPassword) {
+        showError("Passwords do not match");
+        return;
+      }
+      
+      if (password.length < 6) {
+        showError("Password must be at least 6 characters long");
+        return;
+      }
+      
+      try {
+        loginBtn.textContent = "Creating account...";
+        loginBtn.disabled = true;
+        
+        // Create the user account
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Update the user's profile with their name
+        await updateProfile(user, {
+          displayName: name
+        });
+        
+        // Clear any error messages
+        errorMessage.textContent = "";
+        
+        // Initialize the user's data in the database
+        await set(ref(db, `devices/${user.uid}`), {
+          email: email,
+          displayName: name,
+          lastSeen: serverTimestamp()
+        });
+        
+        // Switch back to login mode
+        isRegisterMode = false;
+        toggleAuthMode();
+        
+        // Auto-login after successful registration
+        await signInWithEmailAndPassword(auth, email, password);
+        
+      } catch (err) {
+        showError("Registration failed: " + err.message);
+        loginBtn.textContent = "Register";
+        loginBtn.disabled = false;
+      }
+    }
+
+    // Logout functionality
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      try {
+        if (watchId) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+        await signOut(auth);
+      } catch (err) {
+        console.error("Logout error:", err);
+      }
+    });
+
+    // Enter key for login/register
+    document.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && loginBox.style.display !== "none") {
+        e.preventDefault();
+        document.getElementById("loginBtn").click();
+      }
+    });
+
+    // Authentication state observer
+    let locationUpdateInterval = null;
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loginBox.style.display = "none";
+        userEmail = user.email;
+        userName = user.displayName || user.email.split('@')[0];
+        accountName.textContent = userName;
+        accountEmail.textContent = userEmail;
+        initMap(user.uid);
+        sidebarNotifBar.innerHTML = `<span class="status-indicator"></span>Logged in as: ${userName}`;
+
+        // Start periodic location notification updates
+        if (locationUpdateInterval) clearInterval(locationUpdateInterval);
+        locationUpdateInterval = setInterval(() => {
+          refreshLocationNotifications();
+        }, 300000); // 5 minutes
+        // Also run immediately on login
+        refreshLocationNotifications();
+        updateLinkedDevicesNotifBar();
+      } else {
+        loginBox.style.display = "block";
+        accountName.textContent = "-";
+        accountEmail.textContent = "-";
+        sidebarNotifBar.innerHTML = `<span class="status-indicator"></span>Please log in to start tracking`;
+        if (map) {
+          map.remove();
+          map = null;
+        }
+        if (locationUpdateInterval) clearInterval(locationUpdateInterval);
+        // Reset reminders/watchers state on logout to avoid carrying listeners to next user
+        try {
+          remindersWatcherAttached = false;
+        } catch (e) {}
+        try { watchedChildren.clear(); } catch(e){}
+        try {
+          Object.keys(reminderTimers).forEach(id => { clearTimeout(reminderTimers[id]); delete reminderTimers[id]; });
+        } catch(e) {}
+        try { document.getElementById('reminderList').innerHTML = ''; } catch(e){}
+        try { hideReminderHUD(); } catch(e){}
+      }
+    });
+
+    // Initialize map and tracking
+    function initMap(uid) {
+      deviceId = uid;
+      // Do NOT auto-request notification permission here to avoid browser blocking.
+      // The user can explicitly enable notifications using the button in the top bar.
+      
+      // Create map centered on Cebu City
+      map = L.map("map").setView([10.3103, 123.9494], 13);
+      
+      // Add tile layer
+      L.tileLayer('https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=ce143278d50e455596672566ef35fb5b', {
+        attribution: "© OpenStreetMap contributors © Geoapify",
+        maxZoom: 19
+      }).addTo(map);
+
+      // Store initial device data
+      set(ref(db, `devices/${deviceId}`), {
+        email: userEmail,
+        displayName: userName,
+        lastSeen: serverTimestamp()
+      });
+
+      // Start location tracking
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            const updates = {
+              [`devices/${deviceId}`]: {
+                latitude,
+                longitude,
+                accuracy,
+                lastSeen: serverTimestamp(),
+                email: userEmail,
+                displayName: userName
+              }
+            };
+            
+            update(ref(db), updates).catch(error => {
+              console.error("Error storing location:", error);
+              notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Error: ${error.message}`;
+            });
+          },
+          (error) => {
+            console.error("Error tracking location:", error);
+            notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Error: ${error.message}`;
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 30000,
+            timeout: 27000
+          }
+        );
+      }
+
+      // Listen for all devices
+      onValue(ref(db, "devices"), (snapshot) => {
+        updateDevicesList(snapshot);
+      });
+
+      // Manage linked-device listeners and UI
+      refreshLinkedDevices();
+      // Load and watch reminders for this device
+      loadReminders();
+      watchReminders();
+  }
+
+  // Function to check if a linked device's location has changed significantly
+    const lastNotifiedLocations = {};
+    function checkLocationChange(deviceId, newLat, newLon, timestamp) {
+      const lastLoc = lastNotifiedLocations[deviceId];
+      if (!lastLoc || (timestamp && lastLoc.timestamp !== timestamp)) {
+        // Calculate distance if we have a previous location
+        if (lastLoc) {
+          const distance = calculateDistance(
+            lastLoc.lat, lastLoc.lon,
+            newLat, newLon
+          );
+          
+          // If moved more than 100 meters, notify
+          if (distance > 0.1) {
+            const deviceRef = ref(db, `devices/${deviceId}`);
+            get(deviceRef).then(snapshot => {
+              const device = snapshot.val();
+              if (device) {
+                const name = device.displayName || device.email || `Device ${deviceId.substring(0, 8)}`;
+                notifBar.innerHTML = `<span class="status-indicator"></span>${name} has moved ${distance.toFixed(2)}km`;
+              }
+            });
+          }
+        }
+        
+        // Update last known location
+        lastNotifiedLocations[deviceId] = {
+          lat: newLat,
+          lon: newLon,
+          timestamp: timestamp
+        };
+      }
+    }
+
+    // Calculate distance between two points in kilometers
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Earth's radius in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+  onValue(ref(db, "devices"), updateDevicesList);
+
+    // Update devices list and map markers
+    function updateDevicesList(snapshot) {
+      const deviceList = document.getElementById("deviceList");
+      deviceList.innerHTML = ""; // Clear current list
+      const devices = snapshot.val() || {};
+
+      // Clear old markers that are no longer in the list
+      Object.keys(markers).forEach(id => {
+        if (!devices[id]) {
+          markers[id].remove();
+          delete markers[id];
+        }
+      });
+
+      // Update each device
+      for (const id in devices) {
+        const device = devices[id];
+        if (!device) continue;
+
+        const { latitude, longitude, email, displayName, lastSeen, accuracy, linkedTo } = device;
+        const isLinkedDevice = linkedTo === deviceId; // This device is linked to current user
+        const isParentDevice = device.links && device.links[id]; // This device is the parent
+        const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
+
+        // Only process if it's the current user's device or a linked device
+        if (id === deviceId || isLinkedDevice || isParentDevice) {
+          // Update or create marker if location available
+          if (hasLocation) {
+            if (!markers[id]) {
+              const isCurrentUser = id === deviceId;
+              const markerColor = isCurrentUser ? '#0077ff' : (isLinkedDevice ? '#28a745' : '#666');
+              const icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: ${markerColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+              });
+
+              markers[id] = L.marker([latitude, longitude], { icon })
+                .addTo(map)
+                .bindPopup(createPopupContent(id, device));
+            } else {
+              markers[id].setLatLng([latitude, longitude]);
+              markers[id].setPopupContent(createPopupContent(id, device));
+            }
+          }
+
+          // Create list item
+          const deviceItem = document.createElement("div");
+          deviceItem.className = `device-item ${id === deviceId ? 'current-device' : ''}`;
+          const timeDiff = lastSeen ? getTimeDifference(lastSeen) : 'Unknown';
+
+          deviceItem.innerHTML = `
+            <div class="device-info">
+              <div class="device-id">
+                ${displayName || email || `Device ${id.substring(0, 8)}`}
+                ${id === deviceId ? '<span style="color:#0077ff;font-size:12px;margin-left:5px;">(You)</span>' : 
+                  (isLinkedDevice ? '<span style="color:#28a745;font-size:12px;margin-left:5px;">(Linked)</span>' : '')}
+              </div>
+              <div class="device-coords">
+                ${hasLocation ? `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 
+                '<span style="color:#dc3545">No location available</span>'}
+              </div>
+              <div class="device-time">🕒 ${timeDiff}</div>
+            </div>
+          `;
+
+          deviceItem.addEventListener('click', () => {
+            if (hasLocation && markers[id]) {
+              map.setView([latitude, longitude], 16);
+              markers[id].openPopup();
+            }
+            showDeviceDetails(id, device);
+          });
+
+          deviceList.appendChild(deviceItem);
+        }
+      }
+    }
+
+    // Helper function to create popup content
+    function createPopupContent(id, device) {
+      const { latitude, longitude, email, displayName, lastSeen, accuracy, linkedTo } = device;
+      const isLinkedDevice = linkedTo === deviceId;
+      return `
+        <strong>${displayName || email || 'Unknown User'}</strong><br>
+        ${id === deviceId ? '(You)' : (isLinkedDevice ? '(Linked Device)' : '')}<br>
+        Email: ${email}<br>
+        Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}<br>
+        ${accuracy ? `Accuracy: ${Math.round(accuracy)}m<br>` : ''}
+        Last seen: ${lastSeen ? new Date(lastSeen).toLocaleString() : 'Unknown'}
+      `;
+    }
+
+    // Show device details in dashboard
+    function showDeviceDetails(id, device) {
+      const { latitude, longitude, email, displayName, lastSeen, accuracy, linkedTo } = device;
+      const isLinkedDevice = linkedTo === deviceId;
+      const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
+
+      const deviceDetails = document.getElementById("deviceDetails");
+      deviceDetails.classList.remove("hidden");
+      deviceDetails.innerHTML = `
+        <div style="margin-top:20px; padding:18px; background:#f8f9fa; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+          <h4 style="margin-bottom:10px; color:#0077ff;">
+            ${displayName || email || `Device ${id.substring(0, 8)}`}
+            ${id === deviceId ? '<span style="color:#0077ff;font-size:12px;margin-left:5px;">(You)</span>' : 
+              (isLinkedDevice ? '<span style="color:#28a745;font-size:12px;margin-left:5px;">(Linked)</span>' : '')}
+          </h4>
+          <div><b>Email:</b> ${email}</div>
+          <div><b>Location:</b> ${hasLocation ? 
+            `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` : 
+            '<span style="color:#dc3545">No location available</span>'}
+          </div>
+          <div><b>Accuracy:</b> ${accuracy ? Math.round(accuracy) + 'm' : 'Unknown'}</div>
+          <div><b>Last seen:</b> ${lastSeen ? new Date(lastSeen).toLocaleString() : 'Unknown'}</div>
+          ${hasLocation ? 
+            `<div style="margin-top:10px; display:flex; gap:8px;">
+              <button style="background:#0077ff; color:white; border:none; border-radius:6px; padding:8px 16px; font-weight:bold; cursor:pointer;" 
+                      onclick="centerMapDevice('${id}')">Center Map</button>
+              ${isLinkedDevice ? 
+                `<button style="background:#28a745; color:white; border:none; border-radius:6px; padding:8px 16px; font-weight:bold; cursor:pointer;"
+                        onclick="trackDevice('${id}')">Track Location</button>` : ''}
+            </div>` : ''}
+        </div>
+      `;
+    }
+
+    // Center map on selected device
+    window.centerMapDevice = function(id) {
+      if (markers[id]) {
+        map.setView(markers[id].getLatLng(), 16);
+        markers[id].openPopup();
+      }
+    };
+
+    // Track selected device (follow its location in real time)
+    let trackedDeviceId = null;
+    window.trackDevice = function(id) {
+      trackedDeviceId = id;
+      notifBar.innerHTML = `<span class="status-indicator"></span>Tracking ${id === deviceId ? 'yourself' : 'device'}...`;
+    };
+
+    // Update map view if tracking a device
+    function updateTrackedDeviceView(data) {
+      if (trackedDeviceId && data && data[trackedDeviceId] && markers[trackedDeviceId]) {
+        const { latitude, longitude } = data[trackedDeviceId];
+        map.setView([latitude, longitude], 16);
+        markers[trackedDeviceId].openPopup();
+      }
+    }
+
+    // Helper functions
+    function showError(message) {
+      errorMessage.textContent = message;
+      setTimeout(() => {
+        errorMessage.textContent = "";
+      }, 5000);
+    }
+
+    function getTimeDifference(timestamp) {
+      const now = new Date();
+      const then = new Date(timestamp);
+      const diffMs = now - then;
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+      return `${Math.floor(diffMins / 1440)}d ago`;
+    }
+
+    // Function to check device location and notify if needed
+    let lastLocationChecks = {};
+    function checkDeviceLocation(deviceId, deviceData) {
+      const now = Date.now();
+      const lastCheck = lastLocationChecks[deviceId] || 0;
+      
+      // Check no more than once every 2 minutes
+      if (now - lastCheck < 120000) return;
+      
+      lastLocationChecks[deviceId] = now;
+      const { latitude, longitude, lastSeen, displayName, email } = deviceData;
+      
+      // Get current device's location for distance calculation
+      get(ref(db, `devices/${deviceId}`)).then(snapshot => {
+        const currentDevice = snapshot.val();
+        if (currentDevice && currentDevice.latitude) {
+          const distance = calculateDistance(
+            currentDevice.latitude,
+            currentDevice.longitude,
+            latitude,
+            longitude
+          );
+
+          const deviceLabel = displayName || email || `Device ${deviceId.substring(0,8)}`;
+          
+          // Notify if device is more than 1km away
+          if (distance > 1) {
+            sendLocationAlert(deviceLabel, distance);
+          }
+          
+          // Update the notification bar
+          notifBar.innerHTML = `<span class="status-indicator"></span>${deviceLabel} is ${distance.toFixed(2)}km away`;
+          
+          // Store this location check
+          set(ref(db, `locationChecks/${deviceId}`), {
+            timestamp: serverTimestamp(),
+            distance: distance,
+            latitude: latitude,
+            longitude: longitude
+          });
+        }
+      });
+    }
+
+    // Function to send a browser notification
+    function sendLocationAlert(deviceLabel, distance) {
+      if (!("Notification" in window)) return;
+      
+      if (Notification.permission === "granted") {
+        new Notification("CheckPoint Location Alert", {
+          body: `${deviceLabel} is ${distance.toFixed(2)}km away from you`,
+          icon: "/favicon.ico"
+        });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            sendLocationAlert(deviceLabel, distance);
+          }
+        });
+      }
+    }
+
+    // Function to refresh location notifications
+    function refreshLocationNotifications() {
+      const linksRef = ref(db, `links/${deviceId}`);
+      get(linksRef).then(snapshot => {
+        const links = snapshot.val() || {};
+        
+        Object.keys(links).forEach(childId => {
+          get(ref(db, `devices/${childId}`)).then(deviceSnapshot => {
+            const device = deviceSnapshot.val();
+            if (device && device.latitude && device.longitude) {
+              checkDeviceLocation(childId, device);
+            }
+          });
+        });
+        // After checking individual child locations, update the visible notification bar summary
+        updateLinkedDevicesNotifBar();
+      });
+    }
+
+    // Update the top notification bar with a compact summary of linked devices (runs every 5 minutes via existing scheduler)
+    async function updateLinkedDevicesNotifBar() {
+      if (!deviceId) return;
+      try {
+        const linksSnap = await get(ref(db, `links/${deviceId}`));
+        const links = linksSnap.val() || {};
+        const childIds = Object.keys(links);
+        if (childIds.length === 0) {
+          notifBar.innerHTML = `<span class="status-indicator"></span>No linked devices`; 
+          return;
+        }
+
+        // Fetch each child's latest info in parallel
+        const promises = childIds.map(id => get(ref(db, `devices/${id}`)).then(s => ({ id, data: s.val() })));
+        const results = await Promise.all(promises);
+
+        // Build a compact summary: Name (coords) · lastSeen
+        const parts = results.map(r => {
+          const d = r.data || {};
+          const name = d.displayName || d.email || `Device ${r.id.substring(0,8)}`;
+          if (d.latitude && d.longitude) {
+            const coords = `${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}`;
+            const last = d.lastSeen ? getTimeDifference(d.lastSeen) : 'Unknown';
+            return `${name}: ${coords} · ${last}`;
+          }
+          return `${name}: No location`; 
+        }).slice(0,4); // show up to 4 devices
+
+        notifBar.innerHTML = `<span class="status-indicator"></span>` + parts.join(' | ');
+      } catch (err) {
+        console.error('Error updating linked devices notif bar:', err);
+      }
+    }
+
+    // Request permissions on load
+    window.addEventListener('load', () => {
+      if (navigator.geolocation) {
+        navigator.permissions.query({name: 'geolocation'}).then((result) => {
+          console.log('Geolocation permission:', result.state);
+        });
+      }
+      // Do not call Notification.requestPermission() automatically here — modern browsers
+      // on insecure origins or without a user gesture will block the prompt. Provide an
+      // explicit button instead.
+      updateNotificationUI();
+    });
+
+    // Notification UI elements
+    const enableNotifBtn = document.getElementById('enableNotifBtn');
+    const notifText = document.getElementById('notifText');
+
+    function updateNotificationUI() {
+      if (!('Notification' in window)) {
+        enableNotifBtn.style.display = 'none';
+        notifText.textContent = 'Notifications not supported in this browser.';
+        return;
+      }
+
+      if (Notification.permission === 'granted') {
+        enableNotifBtn.style.display = 'none';
+        notifText.textContent = 'Notifications enabled.';
+      } else if (Notification.permission === 'denied') {
+        enableNotifBtn.style.display = 'inline-block';
+        notifText.textContent = 'Notifications are blocked. Check browser settings to allow.';
+      } else {
+        enableNotifBtn.style.display = 'inline-block';
+        notifText.textContent = 'Click to enable notifications for alerts.';
+      }
+    }
+
+    enableNotifBtn.addEventListener('click', async () => {
+      if (!('Notification' in window)) return;
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          notifText.textContent = 'Notifications enabled.';
+          enableNotifBtn.style.display = 'none';
+          // Optionally show a test notification
+          new Notification('Checkpoint Tracker', { body: 'Notifications enabled.' });
+        } else if (permission === 'denied') {
+          notifText.textContent = 'Notifications blocked. Open browser settings to allow.';
+        } else {
+          notifText.textContent = 'Notification permission dismissed.';
+        }
+      } catch (err) {
+        console.error('Notification request failed:', err);
+        notifText.textContent = 'Unable to request notification permission.';
+      }
+    });
+
+    // --- Reminders feature ---
+    const addReminderBtn = document.getElementById('addReminderBtn');
+    const reminderNoteInput = document.getElementById('reminderNote');
+    const reminderTimeInput = document.getElementById('reminderTime');
+    const reminderMsg = document.getElementById('reminderMsg');
+    const reminderList = document.getElementById('reminderList');
+
+    // In-memory timers for scheduled reminders
+    const reminderTimers = {};
+
+    addReminderBtn.addEventListener('click', async () => {
+      const note = reminderNoteInput.value.trim();
+      const timeStr = reminderTimeInput.value;
+      if (!note || !timeStr) {
+        reminderMsg.textContent = 'Please enter a note and a time.';
+        return;
+      }
+
+      const when = new Date(timeStr).getTime();
+      if (isNaN(when) || when <= Date.now()) {
+        reminderMsg.textContent = 'Please choose a future date/time.';
+        return;
+      }
+
+      addReminderBtn.disabled = true;
+      addReminderBtn.textContent = 'Adding...';
+
+      try {
+        // Create a new reminder in Firebase
+        const newId = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        await set(ref(db, `reminders/${deviceId}/${newId}`), {
+          id: newId,
+          note,
+          time: when,
+          createdAt: serverTimestamp()
+        });
+
+  reminderNoteInput.value = '';
+  reminderTimeInput.value = '';
+  reminderMsg.textContent = 'Reminder saved.'; // watchReminders onValue will refresh the list
+      } catch (err) {
+        reminderMsg.textContent = 'Error saving reminder: ' + err.message;
+      }
+
+      addReminderBtn.disabled = false;
+      addReminderBtn.textContent = 'Add Reminder';
+    });
+
+    const scheduledReminderIds = new Set();
+    async function loadReminders() {
+      // Clear existing UI and timers first (defensive)
+      reminderList.innerHTML = '';
+      if (!deviceId) return;
+      // Clear previously scheduled timers to avoid duplicates
+      Object.keys(reminderTimers).forEach(id => {
+        try { clearTimeout(reminderTimers[id]); } catch(e){}
+        delete reminderTimers[id];
+      });
+      scheduledReminderIds.clear();
+      try {
+        const snap = await get(ref(db, `reminders/${deviceId}`));
+        const data = snap.val() || {};
+        const entries = Object.values(data).sort((a,b) => a.time - b.time);
+
+        if (entries.length === 0) {
+          reminderList.innerHTML = '<div style="padding:8px;color:#cfe9ff;">No reminders</div>';
+          return;
+        }
+
+        entries.forEach(r => {
+          const when = new Date(r.time);
+          const item = document.createElement('div');
+          item.style.padding = '8px';
+          item.style.border = '1px solid rgba(255,255,255,0.06)';
+          item.style.borderRadius = '6px';
+          item.style.marginBottom = '8px';
+          item.innerHTML = `
+            <div style="font-weight:bold;color:#e0f7fa;">${r.note}</div>
+            <div style="font-size:12px;color:#cfe9ff;">${when.toLocaleString()}</div>
+          `;
+
+          const btns = document.createElement('div');
+          btns.style.marginTop = '6px';
+          const del = document.createElement('button');
+          del.textContent = 'Delete';
+          del.style.background = '#dc3545';
+          del.style.color = 'white';
+          del.style.border = 'none';
+          del.style.borderRadius = '6px';
+          del.style.padding = '6px 8px';
+          del.style.cursor = 'pointer';
+          del.onclick = () => deleteReminder(r.id);
+
+          btns.appendChild(del);
+          item.appendChild(btns);
+          // Avoid rendering duplicates in case loadReminders is triggered multiple times
+          if (!document.querySelector(`[data-reminder-id="${r.id}"]`)) {
+            item.setAttribute('data-reminder-id', r.id);
+            reminderList.appendChild(item);
+          }
+
+          // Ensure not scheduling duplicate timers for same id
+          if (reminderTimers[r.id]) {
+            clearTimeout(reminderTimers[r.id]);
+            delete reminderTimers[r.id];
+          }
+          scheduleReminder(r);
+        });
+      } catch (err) {
+        reminderList.innerHTML = '<div style="padding:8px;color:#ffcdd2;">Error loading reminders</div>';
+        console.error('Error loading reminders', err);
+      }
+    }
+
+    function scheduleReminder(r) {
+      // Clear existing timer
+      if (reminderTimers[r.id]) {
+        clearTimeout(reminderTimers[r.id]);
+      }
+
+      const delay = r.time - Date.now();
+      if (delay <= 0) return; // past due
+
+      reminderTimers[r.id] = setTimeout(async () => {
+        // Show notification if permitted, otherwise update notifBar
+        const label = r.note || 'Reminder';
+        // 1) Show in-app HUD + ping
+        showReminderHUD(r);
+
+        // 2) Browser notification if allowed (attach onclose to remove reminder when user closes)
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            const n = new Notification('Reminder', { body: label });
+            // When the notification is closed by the user, delete the reminder
+            n.onclose = () => {
+              try { deleteReminder(r.id); } catch (e) { console.error('Failed to delete reminder on notification close', e); }
+            };
+            // Optional: focus window on click
+            n.onclick = () => { try { window.focus(); } catch (e){} };
+          } catch (e) {
+            console.error('Notification error', e);
+            notifBar.innerHTML = `<span class="status-indicator"></span>Reminder: ${label}`;
+          }
+        } else {
+          // Fallback visual update
+          notifBar.innerHTML = `<span class="status-indicator"></span>Reminder: ${label}`;
+        }
+      }, delay);
+    }
+
+    // Reminder HUD + sound
+    const reminderHUD = document.getElementById('reminderHUD');
+    const reminderHUDText = document.getElementById('reminderHUDText');
+    const snoozeBtn = document.getElementById('snoozeBtn');
+    const dismissBtn = document.getElementById('dismissBtn');
+    let currentReminder = null;
+
+    function playPing() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(880, ctx.currentTime);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.0);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        o.stop(ctx.currentTime + 1.0);
+      } catch (e) {
+        console.warn('Audio ping failed', e);
+      }
+    }
+
+    function showReminderHUD(r) {
+      currentReminder = r;
+      reminderHUDText.textContent = r.note || 'Reminder';
+      reminderHUD.style.display = 'block';
+      // ensure it's visible even if the page is scrolled
+      reminderHUD.scrollIntoView({ block: 'center' });
+      playPing();
+    }
+
+    function hideReminderHUD() {
+      reminderHUD.style.display = 'none';
+      currentReminder = null;
+    }
+
+    // Snooze: reschedule current for +5 minutes
+    snoozeBtn.addEventListener('click', async () => {
+      if (!currentReminder) return;
+      const newTime = Date.now() + 5 * 60 * 1000;
+      try {
+        await update(ref(db, `reminders/${deviceId}/${currentReminder.id}`), { time: newTime, fired: false });
+        hideReminderHUD();
+        loadReminders();
+      } catch (e) {
+        console.error('Snooze failed', e);
+      }
+    });
+
+    // Dismiss: delete the reminder and hide UI
+    dismissBtn.addEventListener('click', async () => {
+      if (!currentReminder) return;
+      try {
+        await deleteReminder(currentReminder.id);
+        hideReminderHUD();
+      } catch (e) {
+        console.error('Dismiss failed', e);
+      }
+    });
+
+    async function deleteReminder(id) {
+      if (!deviceId) return;
+      try {
+        await set(ref(db, `reminders/${deviceId}/${id}`), null);
+        if (reminderTimers[id]) {
+          clearTimeout(reminderTimers[id]);
+          delete reminderTimers[id];
+        }
+        loadReminders();
+      } catch (err) {
+        console.error('Delete reminder error', err);
+      }
+    }
+
+    // Listen for remote changes (adds/deletes) so UI stays in sync
+    let remindersWatcherAttached = false;
+    let remindersReloadTimer = null;
+    function watchReminders() {
+      if (!deviceId || remindersWatcherAttached) return;
+      const rRef = ref(db, `reminders/${deviceId}`);
+      onValue(rRef, (snap) => {
+        // Debounce rapid DB events (some updates may fire multiple times)
+        if (remindersReloadTimer) clearTimeout(remindersReloadTimer);
+        remindersReloadTimer = setTimeout(() => {
+          loadReminders();
+        }, 150);
+      });
+      remindersWatcherAttached = true;
+    }
+
+    // Call loadReminders/watch when user logs in or when deviceId set
+    // We'll call these after initMap completes and deviceId is assigned.
+  </script>
+  <script>
+    // Register service worker for PWA (only on secure contexts / localhost)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        // Only register when on https or on localhost
+        const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (location.protocol === 'https:' || isLocal) {
+          navigator.serviceWorker.register('/service-worker.js').then(reg => {
+            console.log('Service worker registered:', reg.scope);
+          }).catch(err => {
+            console.warn('Service worker registration failed:', err);
+          });
+        } else {
+          console.log('Service worker not registered: insecure context');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
