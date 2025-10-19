@@ -327,7 +327,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-    import { getDatabase, ref, set, get, update, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+    import { getDatabase, ref, set, get, update, onValue, serverTimestamp, push } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
     import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
     // Firebase config
@@ -768,6 +768,18 @@
             update(ref(db), updates).catch(error => {
               console.error("Error storing location:", error);
               notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Error: ${error.message}`;
+            });
+
+            // Add: push to locationHistory for summarization (non-invasive)
+            try {
+              const histRef = ref(db, `locationHistory/${deviceId}`);
+              push(histRef, {
+                latitude,
+                longitude,
+                accuracy,
+                timestamp: Date.now()
+              }).catch(e => console.warn('history push failed', e));
+            } catch (e) { console.warn('history push error', e); }
             });
           },
           (error) => {
