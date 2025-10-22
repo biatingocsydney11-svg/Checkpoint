@@ -638,7 +638,7 @@
 
     // Function to refresh linked devices list
     // Track attached child listeners to avoid duplicates
-    const watchedChildren = new Set();
+    const watchedChildren = new Map();
     async function refreshLinkedDevices() {
       if (!deviceId || !linkedDevicesContainer) return;
       const linksRef = ref(db, `links/${deviceId}`);
@@ -647,9 +647,13 @@
         linkedDevicesContainer.innerHTML = "";
         
         // Remove listeners for children that are no longer linked
-        Array.from(watchedChildren).forEach(ch => {
-          if (!links[ch]) {
-            watchedChildren.delete(ch);
+        Array.from(watchedChildren.keys()).forEach(childId => {
+          if (!links[childId]) {
+            const unsubscribe = watchedChildren.get(childId);
+            if (typeof unsubscribe === 'function') {
+              unsubscribe();
+            }
+            watchedChildren.delete(childId);
           }
         });
 
@@ -691,13 +695,13 @@
 
             // Attach per-child device listener only once
             if (!watchedChildren.has(childId)) {
-              watchedChildren.add(childId);
-              onValue(deviceRef, (deviceSnapshot) => {
+              const unsubscribe = onValue(deviceRef, (deviceSnapshot) => {
                 const device = deviceSnapshot.val();
                 if (device && device.lastSeen) {
                   checkDeviceLocation(childId, device);
                 }
               });
+              watchedChildren.set(childId, unsubscribe);
             }
           }
         }
@@ -1173,13 +1177,7 @@
       deviceList.innerHTML = "";
       const devices = snapshot.val() || {};
       let currentDeviceSeen = false;
-
-      Object.keys(markers).forEach(id => {
-        if (!devices[id]) {
-          markers[id].remove();
-          delete markers[id];
-        }
-      });
+      const visibleMarkerIds = new Set();
 
       for (const id in devices) {
         const device = devices[id];
@@ -1224,6 +1222,10 @@
               markers[id].setLatLng([latitude, longitude]);
               markers[id].setPopupContent(createPopupContent(id, device));
             }
+            visibleMarkerIds.add(id);
+          } else if (markers[id]) {
+            markers[id].remove();
+            delete markers[id];
           }
 
           if (!isCurrentUser) {
@@ -1277,6 +1279,18 @@
           }
         }
       }
+
+      // Always keep marker for current device if present
+      if (markers[deviceId]) {
+        visibleMarkerIds.add(deviceId);
+      }
+
+      Object.keys(markers).forEach(id => {
+        if (!visibleMarkerIds.has(id) || !devices[id]) {
+          markers[id].remove();
+          delete markers[id];
+        }
+      });
 
       if (!currentDeviceSeen && userLocationCoords) {
         userLocationCoords.textContent = 'Waiting for device updates...';
