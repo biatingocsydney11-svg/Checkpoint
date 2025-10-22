@@ -744,12 +744,14 @@
         }
 
         if (foundChildId) {
+          console.log('Found child device:', foundChildId, 'for email:', childEmail);
           // Check if device is already linked
           const existingLinkRef = ref(db, `devices/${foundChildId}/linkedTo`);
           const existingLinkSnapshot = await get(existingLinkRef);
           
           if (existingLinkSnapshot.val()) {
             linkChildMsg.textContent = "This device is already linked to another parent.";
+            linkChildMsg.style.color = "#ffc107";
           } else {
             // Save bidirectional link
             const updates = {
@@ -757,13 +759,18 @@
               [`devices/${foundChildId}/linkedTo`]: deviceId
             };
             
+            console.log('Creating link:', updates);
             await update(ref(db), updates);
-            linkChildMsg.textContent = "Child linked successfully!";
+            linkChildMsg.textContent = `✓ Linked ${childEmail}! They must log in on their device and allow location for tracking to work.`;
+            linkChildMsg.style.color = "#28a745";
             linkChildEmailInput.value = "";
+            
+            notifBar.innerHTML = `<span class="status-indicator" style="background:#28a745"></span>Linked ${childEmail} (UID: ${foundChildId.substring(0,8)}...) - waiting for their location updates`;
             refreshLinkedDevices();
           }
         } else {
-          linkChildMsg.textContent = "No device found with that email.";
+          linkChildMsg.textContent = `No device found with email: ${childEmail}. They must create an account first!`;
+          linkChildMsg.style.color = "#dc3545";
         }
       } catch (err) {
         linkChildMsg.textContent = "Error: " + err.message;
@@ -1073,9 +1080,14 @@
 
       // Start location tracking
       if (navigator.geolocation) {
+        console.log('Starting geolocation watch for deviceId:', deviceId);
+        notifBar.innerHTML = `<span class="status-indicator"></span>Starting location tracking...`;
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             const { latitude, longitude, accuracy } = position.coords;
+            console.log('Geolocation update:', latitude, longitude, 'deviceId:', deviceId);
+            notifBar.innerHTML = `<span class="status-indicator"></span>Got location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} - Saving...`;
+            
             const deviceRef = ref(db, `devices/${deviceId}`);
             const updates = {
               latitude,
@@ -1089,18 +1101,24 @@
               updates.accuracy = accuracy;
             }
 
+            console.log('Attempting to write location to:', `devices/${deviceId}`, updates);
             update(deviceRef, updates)
               .then(() => {
+                console.log('Location update successful');
+                notifBar.innerHTML = `<span class="status-indicator" style="background:#28a745"></span>Location saved successfully at ${new Date().toLocaleTimeString()}`;
                 maybeRecordLocationHistory(latitude, longitude, accuracy, position.timestamp || Date.now());
               })
               .catch(error => {
               console.error("Error storing location:", error);
-              notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Error: ${error.message}`;
+              notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>WRITE FAILED: ${error.code} - ${error.message}`;
+              alert(`Location write failed!\nError: ${error.code}\nMessage: ${error.message}\n\nCheck Firebase rules allow: auth.uid === "${deviceId}"`);
             });
           },
           (error) => {
             console.error("Error tracking location:", error);
-            notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Error: ${error.message}`;
+            const errorMsg = `Location Error: ${error.code} - ${error.message}`;
+            notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>${errorMsg}`;
+            alert(errorMsg + '\n\nMake sure you allowed location access in your browser!');
           },
           {
             enableHighAccuracy: true,
@@ -1108,12 +1126,30 @@
             timeout: 27000
           }
         );
+      } else {
+        notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>Geolocation not supported`;
+        alert('Your browser does not support geolocation!');
       }
 
-      // Listen for all devices
-      onValue(ref(db, "devices"), (snapshot) => {
-        updateDevicesList(snapshot);
-      });
+      // Listen for all devices - wait a moment for auth to fully propagate
+      setTimeout(() => {
+        console.log('Setting up devices listener with authenticated user');
+        onValue(ref(db, "devices"), (snapshot) => {
+          console.log('Devices snapshot received');
+          const devicesData = snapshot.val();
+          console.log('Raw devices data:', devicesData);
+          console.log('Current deviceId:', deviceId);
+          if (devicesData && devicesData[deviceId]) {
+            console.log('My device data:', devicesData[deviceId]);
+          } else {
+            console.log('WARNING: My device not found in snapshot!');
+          }
+          updateDevicesList(snapshot);
+        }, (error) => {
+          console.error('Error reading devices:', error);
+          notifBar.innerHTML = `<span class="status-indicator" style="background:#dc3545"></span>READ ERROR: ${error.code} - ${error.message}`;
+        });
+      }, 500);
 
       // Manage linked-device listeners and UI
       refreshLinkedDevices();
@@ -1179,6 +1215,8 @@
       let currentDeviceSeen = false;
       const visibleMarkerIds = new Set();
 
+      console.log('updateDevicesList called. Current deviceId:', deviceId, 'Devices:', Object.keys(devices));
+
       for (const id in devices) {
         const device = devices[id];
         if (!device) continue;
@@ -1190,17 +1228,22 @@
         const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
         const timeDiff = lastSeen ? getTimeDifference(lastSeen) : 'Unknown';
 
+        console.log('Processing device:', id, 'isCurrentUser:', isCurrentUser, 'hasLocation:', hasLocation, 'lat:', latitude, 'lon:', longitude);
+
         if (isCurrentUser || isLinkedDevice || isParentDevice) {
           if (isCurrentUser) {
             currentDeviceSeen = true;
+            console.log('Found current user device. hasLocation:', hasLocation);
             if (userLocationPanel) {
               if (hasLocation) {
                 userLocationPanel.classList.remove("hidden");
                 userLocationCoords.textContent = `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
                 userLocationTime.textContent = `Last updated ${timeDiff}`;
+                console.log('Updated user location panel with coordinates');
               } else {
                 userLocationCoords.textContent = 'No location available yet';
                 userLocationTime.textContent = '-';
+                console.log('Current user has no location data');
               }
             }
           }
@@ -1293,8 +1336,12 @@
       });
 
       if (!currentDeviceSeen && userLocationCoords) {
+        console.log('WARNING: Current device not seen in device list!');
         userLocationCoords.textContent = 'Waiting for device updates...';
         userLocationTime.textContent = '-';
+        
+        // Show debug info in notification bar
+        notifBar.innerHTML = `<span class="status-indicator" style="background:#ffc107"></span>Device data not appearing in list. Check Firebase console for UID: ${deviceId}`;
       }
 
       if (!deviceList.hasChildNodes()) {
