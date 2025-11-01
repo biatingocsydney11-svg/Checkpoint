@@ -447,20 +447,11 @@
 
         <div id="aiSummaryBox" class="panel">
           <div class="section-heading" style="margin-bottom:8px;">AI Location Summary</div>
-          <div style="color:#9ddcff;font-size:13px;margin-bottom:12px;">Generate an AI-powered summary using Groq (free tier: 14,400 requests/day). Get your API key at <a href="https://console.groq.com" target="_blank" style="color:#00bfff;">console.groq.com</a>.</div>
-          
-          <div id="aiKeyControls">
-            <input type="password" id="aiApiKeyInput" placeholder="Groq API key (stored locally)" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(0,191,255,0.4);background:rgba(0,32,64,0.8);color:#e0f7fa;margin-bottom:8px;">
-            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-              <button id="toggleAiKeyBtn" type="button" style="flex:0 0 auto;background:#225c86;color:#e0f7fa;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;">Show</button>
-              <button id="saveAiKeyBtn" type="button" style="flex:1;background:#00bfff;color:white;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;min-width:140px;">Save key locally</button>
-              <button id="clearAiKeyBtn" type="button" style="flex:0 0 auto;background:#dc3545;color:white;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;">Clear</button>
-            </div>
-          </div>
+          <div style="color:#9ddcff;font-size:13px;margin-bottom:12px;">Generate an AI-powered summary via secure proxy. Your API key is protected and never exposed to users.</div>
           
           <button id="generateAiSummaryBtn" style="width:100%;background:#28a745;color:white;border:none;border-radius:6px;padding:8px 12px;font-weight:bold;cursor:pointer;margin-bottom:8px;">Generate summary</button>
-          <div id="aiSummaryStatus" style="color:#cfe9ff;font-size:13px;margin-bottom:6px;">Enter your Groq API key above to get started.</div>
-          <div id="aiSummaryOutput" style="background:rgba(0,32,64,0.6);border-radius:6px;padding:10px;color:#e0f7fa;font-size:14px;min-height:48px;white-space:pre-wrap;">Add linked devices and your Groq API key, then generate a summary.</div>
+          <div id="aiSummaryStatus" style="color:#cfe9ff;font-size:13px;margin-bottom:6px;">Ready to generate AI summary.</div>
+          <div id="aiSummaryOutput" style="background:rgba(0,32,64,0.6);border-radius:6px;padding:10px;color:#e0f7fa;font-size:14px;min-height:48px;white-space:pre-wrap;">Link devices and click "Generate summary" to see AI insights.</div>
         </div>
 
         <div id="deviceList" class="panel">
@@ -532,7 +523,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const auth = getAuth(app);
-  const AI_SUMMARY_ENDPOINT = ""; // Set to empty to disable proxy - users will enter their own API key
+  const AI_SUMMARY_ENDPOINT = "https://falling-frog-066e.biatingoc-sydney11.workers.dev/"; // Cloudflare Worker proxy for secure AI summaries
+  const EMBEDDED_AI_KEY = ""; // Not used when proxy is enabled
 
     // DOM elements
     const loginBox = document.getElementById("loginBox");
@@ -1852,12 +1844,12 @@
       }
 
       const useProxy = Boolean(AI_SUMMARY_ENDPOINT);
-      let apiKey = "";
-      if (!useProxy) {
+      let apiKey = EMBEDDED_AI_KEY || ""; // Use embedded key first
+      if (!useProxy && !apiKey) {
         apiKey = getActiveAiApiKey();
         if (!apiKey) {
-          aiSummaryStatus.textContent = "Enter your OpenAI API key first.";
-          aiSummaryOutput.textContent = "Paste a key above or save one locally.";
+          aiSummaryStatus.textContent = "API key not configured.";
+          aiSummaryOutput.textContent = "Contact the app administrator.";
           return;
         }
       }
