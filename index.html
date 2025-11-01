@@ -447,18 +447,20 @@
 
         <div id="aiSummaryBox" class="panel">
           <div class="section-heading" style="margin-bottom:8px;">AI Location Summary</div>
+          <div style="color:#9ddcff;font-size:13px;margin-bottom:12px;">Generate an AI-powered summary using Groq (free tier: 14,400 requests/day). Get your API key at <a href="https://console.groq.com" target="_blank" style="color:#00bfff;">console.groq.com</a>.</div>
+          
           <div id="aiKeyControls">
-            <input type="password" id="aiApiKeyInput" placeholder="OpenAI API key (kept in this browser)" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(0,191,255,0.4);background:rgba(0,32,64,0.8);color:#e0f7fa;margin-bottom:8px;">
+            <input type="password" id="aiApiKeyInput" placeholder="Groq API key (stored locally)" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(0,191,255,0.4);background:rgba(0,32,64,0.8);color:#e0f7fa;margin-bottom:8px;">
             <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
               <button id="toggleAiKeyBtn" type="button" style="flex:0 0 auto;background:#225c86;color:#e0f7fa;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;">Show</button>
               <button id="saveAiKeyBtn" type="button" style="flex:1;background:#00bfff;color:white;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;min-width:140px;">Save key locally</button>
               <button id="clearAiKeyBtn" type="button" style="flex:0 0 auto;background:#dc3545;color:white;border:none;border-radius:6px;padding:6px 10px;font-weight:bold;cursor:pointer;">Clear</button>
             </div>
           </div>
+          
           <button id="generateAiSummaryBtn" style="width:100%;background:#28a745;color:white;border:none;border-radius:6px;padding:8px 12px;font-weight:bold;cursor:pointer;margin-bottom:8px;">Generate summary</button>
-          <div id="aiSummaryStatus" style="color:#cfe9ff;font-size:13px;margin-bottom:6px;">AI summary is idle.</div>
-          <div id="aiSummaryOutput" style="background:rgba(0,32,64,0.6);border-radius:6px;padding:10px;color:#e0f7fa;font-size:14px;min-height:48px;white-space:pre-wrap;">Add linked devices and run the AI summarizer to see a narrative.</div>
-          <div id="aiSummaryHint" style="margin-top:6px;color:#7fb9d6;font-size:12px;line-height:1.4;">Keys are stored in this browser's local storage. Avoid using shared devices.</div>
+          <div id="aiSummaryStatus" style="color:#cfe9ff;font-size:13px;margin-bottom:6px;">Enter your Groq API key above to get started.</div>
+          <div id="aiSummaryOutput" style="background:rgba(0,32,64,0.6);border-radius:6px;padding:10px;color:#e0f7fa;font-size:14px;min-height:48px;white-space:pre-wrap;">Add linked devices and your Groq API key, then generate a summary.</div>
         </div>
 
         <div id="deviceList" class="panel">
@@ -530,7 +532,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const auth = getAuth(app);
-  const AI_SUMMARY_ENDPOINT = "https://falling-frog-066e.biatingoc-sydney11.workers.dev/"; // Cloudflare Worker proxy for AI summaries
+  const AI_SUMMARY_ENDPOINT = ""; // Set to empty to disable proxy - users will enter their own API key
 
     // DOM elements
     const loginBox = document.getElementById("loginBox");
@@ -1698,12 +1700,17 @@
           let message = `Proxy HTTP ${proxyResponse.status}`;
           try {
             const errJson = await proxyResponse.json();
+            console.error('Proxy error response:', errJson);
             if (errJson?.error) {
-              message = errJson.error;
+              message = typeof errJson.error === 'string' ? errJson.error : JSON.stringify(errJson.error);
             } else if (errJson?.message) {
               message = errJson.message;
+            } else {
+              message = `Proxy error: ${JSON.stringify(errJson)}`;
             }
-          } catch (err) {}
+          } catch (err) {
+            console.error('Failed to parse error response:', err);
+          }
           throw new Error(message);
         }
 
@@ -1715,14 +1722,16 @@
         return proxySummary.trim();
       }
 
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      // Call Groq API (OpenAI-compatible, free tier: 14,400 requests/day)
+      console.log('Calling Groq API with key:', apiKey.substring(0, 10) + '...');
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
+          model: "llama-3.1-8b-instant",
           temperature: 0.4,
           max_tokens: 220,
           messages: [
@@ -1738,14 +1747,23 @@
         })
       });
 
+      console.log('Groq response status:', response.status);
+      
       if (!response.ok) {
-        let message = `HTTP ${response.status}`;
+        let message = `Groq API error (HTTP ${response.status})`;
         try {
           const errJson = await response.json();
+          console.error('Groq error response:', errJson);
           if (errJson?.error?.message) {
             message = errJson.error.message;
+          } else {
+            message = JSON.stringify(errJson);
           }
-        } catch (err) {}
+        } catch (err) {
+          const errText = await response.text();
+          console.error('Groq error text:', errText);
+          message = errText || message;
+        }
         throw new Error(message);
       }
 
@@ -1912,10 +1930,9 @@ ${limitedLines.join("\n")}`;
         aiSummaryStatus.textContent = `Last updated ${new Date().toLocaleTimeString()}.`;
       } catch (err) {
         console.error("AI summary error", err);
-        aiSummaryStatus.textContent = `AI error: ${err.message}`;
-        if (!aiSummaryOutput.textContent) {
-          aiSummaryOutput.textContent = "Unable to generate summary.";
-        }
+        const errorDetail = err.message || String(err);
+        aiSummaryStatus.textContent = `AI error: ${errorDetail}`;
+        aiSummaryOutput.textContent = `Unable to generate summary.\n\nError details: ${errorDetail}\n\nPossible causes:\n- Cloudflare Worker quota exceeded\n- Azure OpenAI key invalid or expired\n- Worker not deployed correctly\n\nCheck Cloudflare Workers logs for more info.`;
       } finally {
         generateAiSummaryBtn.disabled = false;
         generateAiSummaryBtn.textContent = originalLabel;
